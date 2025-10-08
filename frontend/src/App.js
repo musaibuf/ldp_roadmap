@@ -124,7 +124,7 @@ const handleSubmit = (e) => {
   setStatus({ message: 'Submitting your response...', type: 'info' });
 
   // --- FIRE AND FORGET THE REQUEST ---
-  // We send the request but don't wait for it. 
+  // We send the request but do not wait for it to finish.
   // We add a .catch() just to log any errors for our own debugging.
   // This will NOT affect the user's experience.
   axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData })
@@ -140,9 +140,8 @@ const handleSubmit = (e) => {
     setStatus({ message: 'Your response has been saved!', type: 'success' });
     setStep('review');
     setIsProcessing(false); // Reset for the next page
-  }, 500); // 0.5 second delay
+  }, 750); // A 0.75 second delay feels natural
 };
-
   const handleDownload = async () => {
     setIsProcessing(true);
     setStatus({ message: 'Generating your report...', type: 'info' });
