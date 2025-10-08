@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// --- FIX: We will import this dynamically later ---
+// const { GoogleSpreadsheet } = require('google-spreadsheet'); 
 const { JWT } = require('google-auth-library');
 
 const app = express();
@@ -14,7 +15,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- Google Sheets Setup ---
 const creds = require('./credentials.json');
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID; 
+const SPREADSHEEET_ID = process.env.SPREADSHEET_ID; 
 
 const serviceAccountAuth = new JWT({
     email: creds.client_email,
@@ -22,26 +23,38 @@ const serviceAccountAuth = new JWT({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+// --- FIX: Initialize doc variable here, but load it inside an async function ---
+let doc;
 
 async function accessSheet() {
     try {
+        // --- FIX: Use dynamic import() to load the ESM module ---
+        const { GoogleSpreadsheet } = await import('google-spreadsheet');
+        doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+
         await doc.loadInfo();
         console.log(`Successfully connected to Google Sheet: "${doc.title}"`);
     } catch (error) {
         console.error('Error loading Google Sheet:', error);
     }
 }
-accessSheet();
+
+accessSheet(); // Initialize connection on server start
 
 // --- API Endpoints ---
 
 app.post('/api/submit', async (req, res) => {
     try {
+        if (!doc) { // Safety check in case the initial connection failed
+            throw new Error('Google Sheet not initialized.');
+        }
         const sheet = doc.sheetsByIndex[0];
         const { userInfo, formData } = req.body;
+
         if (!userInfo || !formData) return res.status(400).json({ message: "Missing data." });
+
         const newRow = { Timestamp: new Date().toLocaleString(), Name: userInfo.name, Organization: userInfo.organization, 'Vision 1': formData.vision1, 'Vision 2': formData.vision2, 'Focus Self': formData.focusSelf.join(', '), 'Focus Relational': formData.focusRelational.join(', '), 'Focus Strategic': formData.focusStrategic.join(', '), 'Goal Self 1': formData.goalSelf1, 'Goal Self 2': formData.goalSelf2, 'Goal Relational 1': formData.goalRelational1, 'Goal Relational 2': formData.goalRelational2, 'Goal Strategic 1': formData.goalStrategic1, 'Goal Strategic 2': formData.goalStrategic2, 'Dev Stretch': formData.devStretch, 'Dev Coaching': formData.devCoaching, 'Dev Learning': formData.devLearning, 'Dev Reflection': formData.devReflection, 'Measure Behaviors': formData.measureBehaviors, 'Measure Feedback': formData.measureFeedback, 'Measure Indicators': formData.measureIndicators, 'Accountability': formData.accountability };
+
         await sheet.addRow(newRow);
         res.status(200).json({ message: "Response submitted successfully!" });
     } catch (error) {
@@ -61,12 +74,10 @@ app.post('/api/generate-pdf', async (req, res) => {
         const pdfDoc = new PDFDocument({ size: 'A4', margin: 50 });
         pdfDoc.pipe(res);
 
-        // --- STYLING CONSTANTS ---
         const BRAND_COLOR_RED = '#B31B1B';
         const BRAND_COLOR_ORANGE = '#F57C00';
         const TEXT_COLOR = '#34495e';
         
-        // --- HELPER FUNCTIONS ---
         const addPageHeader = (title) => {
             pdfDoc.fontSize(22).fillColor(BRAND_COLOR_RED).font('Helvetica-Bold').text(title, { align: 'center' });
             pdfDoc.moveDown(2);
@@ -84,34 +95,28 @@ app.post('/api/generate-pdf', async (req, res) => {
             pdfDoc.moveDown(1.5);
         };
 
-        // --- PAGE 1: TITLE PAGE ---
-        // --- FINAL FIX: Use absolute positioning for all title page elements ---
-        const logoWidth = 80;
-        const logoX = (pdfDoc.page.width - logoWidth) / 2;
-        const logoY = 80;
-
         if (fs.existsSync('./logo.png')) {
-            pdfDoc.image('./logo.png', logoX, logoY, { width: logoWidth });
+            const imageWidth = 80;
+            const xPosition = (pdfDoc.page.width - imageWidth) / 2;
+            pdfDoc.image('./logo.png', xPosition, 60, { width: imageWidth });
         }
         
-        // Define vertical positions for each element, guaranteeing space
-        const titleY = logoY + logoWidth + 20; // Logo Y + Logo Height + Padding
-        const subtitleY = titleY + 40;
-        const lineY = subtitleY + 30;
-        const infoY = lineY + 50;
+        const titleY = 150;
+        pdfDoc.y = titleY;
 
-        // Draw elements at their fixed positions
-        pdfDoc.fontSize(28).fillColor(BRAND_COLOR_ORANGE).font('Helvetica-Bold').text('Leader\'s Development Roadmap', 50, titleY, { align: 'center' });
-        pdfDoc.fontSize(16).fillColor(TEXT_COLOR).font('Helvetica').text('Your Responses', 50, subtitleY, { align: 'center' });
-        pdfDoc.strokeColor(BRAND_COLOR_ORANGE).lineWidth(1.5).moveTo(100, lineY).lineTo(pdfDoc.page.width - 100, lineY).stroke();
-
-        pdfDoc.fontSize(14).fillColor(TEXT_COLOR).font('Helvetica-Bold').text('Name:', 50, infoY, { continued: true }).font('Helvetica').text(` ${userInfo.name}`);
+        pdfDoc.fontSize(28).fillColor(BRAND_COLOR_ORANGE).font('Helvetica-Bold').text('Leader\'s Development Roadmap', { align: 'center' });
         pdfDoc.moveDown(0.5);
-        pdfDoc.font('Helvetica-Bold').text('Organization:', 50, pdfDoc.y, { continued: true }).font('Helvetica').text(` ${userInfo.organization}`);
-        pdfDoc.moveDown(0.5);
-        pdfDoc.font('Helvetica-Bold').text('Date:', 50, pdfDoc.y, { continued: true }).font('Helvetica').text(` ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`);
+        pdfDoc.fontSize(16).fillColor(TEXT_COLOR).font('Helvetica').text('Your Responses', { align: 'center' });
+        pdfDoc.moveDown(1.5);
+        pdfDoc.strokeColor(BRAND_COLOR_ORANGE).lineWidth(1.5).moveTo(100, pdfDoc.y).lineTo(pdfDoc.page.width - 100, pdfDoc.y).stroke();
+        pdfDoc.moveDown(3);
 
-        // --- PAGE 2: SUBMITTED RESPONSES ---
+        pdfDoc.fontSize(14).fillColor(TEXT_COLOR).font('Helvetica-Bold').text('Name:', { continued: true }).font('Helvetica').text(` ${userInfo.name}`);
+        pdfDoc.moveDown(0.5);
+        pdfDoc.font('Helvetica-Bold').text('Organization:', { continued: true }).font('Helvetica').text(` ${userInfo.organization}`);
+        pdfDoc.moveDown(0.5);
+        pdfDoc.font('Helvetica-Bold').text('Date:', { continued: true }).font('Helvetica').text(` ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`);
+
         pdfDoc.addPage();
         addPageHeader('Your Submitted Responses');
 
@@ -133,7 +138,6 @@ app.post('/api/generate-pdf', async (req, res) => {
             { label: 'Strategic Leadership Goal 2', value: formData.goalStrategic2 },
         ]);
 
-        // --- PAGE 3: ACTION PLAN ---
         pdfDoc.addPage();
         addPageHeader('Your Action Plan');
 
