@@ -108,28 +108,40 @@ function App() {
     setFormData(prev => ({ ...prev, [category]: newValues }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (formData.focusSelf.length < 2 || formData.focusSelf.length > 3 ||
-        formData.focusRelational.length < 2 || formData.focusRelational.length > 3 ||
-        formData.focusStrategic.length < 2 || formData.focusStrategic.length > 3) {
-      setStatus({ message: 'Please select 2-3 items in each "Focus Areas for Growth" category.', type: 'error' });
-      return;
-    }
-    
-    setIsProcessing(true);
-    setStatus({ message: 'Submitting your response...', type: 'info' });
+  // In frontend/src/App.js
 
-    try {
-      axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData });
-      setStatus({ message: 'Your response has been saved!', type: 'success' });
-      setStep('review'); // Go to review page on successful submission
-    } catch (error) {
-      setStatus({ message: 'Submission failed. Please try again.', type: 'error' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+const handleSubmit = (e) => {
+  e.preventDefault();
+  if (formData.focusSelf.length < 2 || formData.focusSelf.length > 3 ||
+      formData.focusRelational.length < 2 || formData.focusRelational.length > 3 ||
+      formData.focusStrategic.length < 2 || formData.focusStrategic.length > 3) {
+    setStatus({ message: 'Please select 2-3 items in each "Focus Areas for Growth" category.', type: 'error' });
+    return;
+  }
+  
+  // Show the loading state to the user
+  setIsProcessing(true);
+  setStatus({ message: 'Submitting your response...', type: 'info' });
+
+  // --- FIRE AND FORGET THE REQUEST ---
+  // We send the request but don't wait for it. 
+  // We add a .catch() just to log any errors for our own debugging.
+  // This will NOT affect the user's experience.
+  axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData })
+    .catch(error => {
+      // This log is for developers only, the user will not see this.
+      console.error("Background submission to Google Sheets failed:", error);
+    });
+
+  // --- IMMEDIATELY MOVE TO THE NEXT PAGE ---
+  // We use a short timeout to make the UI feel responsive. 
+  // It lets the user see the "Submitting..." message for a moment before the screen changes.
+  setTimeout(() => {
+    setStatus({ message: 'Your response has been saved!', type: 'success' });
+    setStep('review');
+    setIsProcessing(false); // Reset for the next page
+  }, 500); // 0.5 second delay
+};
 
   const handleDownload = async () => {
     setIsProcessing(true);
