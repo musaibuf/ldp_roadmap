@@ -121,7 +121,7 @@ function App() {
     setStatus({ message: 'Submitting your response...', type: 'info' });
 
     try {
-      await axios.post('http://localhost:3001/api/submit', { userInfo, formData });
+      await axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData });
       setStatus({ message: 'Your response has been saved!', type: 'success' });
       setStep('review'); // Go to review page on successful submission
     } catch (error) {
@@ -135,7 +135,7 @@ function App() {
     setIsProcessing(true);
     setStatus({ message: 'Generating your report...', type: 'info' });
     try {
-        const response = await axios.post('http://localhost:3001/api/generate-pdf', { userInfo, formData }, {
+        const response = await axios.post('https://ldp-roadmap.onrender.com/api/generate-pdf', { userInfo, formData }, {
             responseType: 'blob',
         });
         const blob = new Blob([response.data], { type: 'application/pdf' });
