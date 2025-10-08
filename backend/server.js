@@ -3,27 +3,28 @@ const express = require('express');
 const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-// We will import GoogleSpreadsheet dynamically
+const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 
 const app = express();
 const port = process.env.PORT || 3001;
 
+// --- CORS Configuration for Production ---
 const allowedOrigins = [
-    'http://localhost:3000', // For your local testing
+    'http://localhost:3000',
     'https://ldp-roadmap-2l3d.onrender.com' // Your live frontend URL
 ];
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
+            callback(new Error(msg), false);
         }
-        return callback(null, true);
     }
 }));
+
 app.use(express.json({ limit: '10mb' }));
 
 // --- Google Sheets Setup ---
@@ -36,31 +37,35 @@ const serviceAccountAuth = new JWT({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// Initialize doc variable, but load it inside an async function
+// --- FIX #1: Initialize doc variable but DO NOT connect on startup ---
 let doc;
+let isSheetReady = false;
 
-async function accessSheet() {
+async function initializeSheet() {
     try {
-        // Use dynamic import() to load the ESM module
-        const { GoogleSpreadsheet } = await import('google-spreadsheet');
         doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
-
         await doc.loadInfo();
+        isSheetReady = true;
         console.log(`Successfully connected to Google Sheet: "${doc.title}"`);
     } catch (error) {
-        console.error('Error loading Google Sheet:', error);
+        isSheetReady = false;
+        console.error('FATAL: Could not connect to Google Sheet on startup:', error);
     }
 }
-
-accessSheet(); // Initialize connection on server start
 
 // --- API Endpoints ---
 
 app.post('/api/submit', async (req, res) => {
     try {
-        if (!doc) {
-            throw new Error('Google Sheet not initialized. Check server logs for connection errors.');
+        // --- FIX #2: Ensure sheet is ready before trying to use it ---
+        if (!isSheetReady) {
+            console.log('Sheet not ready, attempting to re-initialize...');
+            await initializeSheet(); // Try to connect again
+            if (!isSheetReady) {
+                throw new Error('Google Sheet connection failed.');
+            }
         }
+
         const sheet = doc.sheetsByIndex[0];
         const { userInfo, formData } = req.body;
 
@@ -178,6 +183,9 @@ app.post('/api/generate-pdf', async (req, res) => {
     }
 });
 
+// Start the server and THEN initialize the sheet
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
+    // Initialize the sheet connection AFTER the server has started
+    initializeSheet();
 });
