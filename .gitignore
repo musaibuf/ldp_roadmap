@@ -1,0 +1,25 @@
+# General
+.DS_Store
+*.log
+*.env
+
+# Node dependencies
+node_modules/
+
+# Frontend (Create React App)
+frontend/node_modules/
+frontend/build/
+frontend/coverage/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Backend
+backend/node_modules/
+backend/.env
+backend/credentials.json
+
+# IDE and Editor folders
+.vscode/
+.idea/
