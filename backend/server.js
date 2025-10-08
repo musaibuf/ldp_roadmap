@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// We will import GoogleSpreadsheet dynamically
 const { JWT } = require('google-auth-library');
 
 const app = express();
@@ -37,13 +37,16 @@ const serviceAccountAuth = new JWT({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// --- FIX #1: Initialize doc variable but DO NOT connect on startup ---
+// Initialize doc variable, but load it inside an async function
 let doc;
 let isSheetReady = false;
 
 async function initializeSheet() {
     try {
+        // Use dynamic import() to load the ESM module
+        const { GoogleSpreadsheet } = await import('google-spreadsheet');
         doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+
         await doc.loadInfo();
         isSheetReady = true;
         console.log(`Successfully connected to Google Sheet: "${doc.title}"`);
@@ -57,10 +60,9 @@ async function initializeSheet() {
 
 app.post('/api/submit', async (req, res) => {
     try {
-        // --- FIX #2: Ensure sheet is ready before trying to use it ---
         if (!isSheetReady) {
             console.log('Sheet not ready, attempting to re-initialize...');
-            await initializeSheet(); // Try to connect again
+            await initializeSheet();
             if (!isSheetReady) {
                 throw new Error('Google Sheet connection failed.');
             }
@@ -147,7 +149,7 @@ app.post('/api/generate-pdf', async (req, res) => {
             { label: 'Relational Leadership', value: formData.focusRelational.join(' | ') },
             { label: 'Strategic Leadership', value: formData.focusStrategic.join(' | ') },
         ]);
-        addContentBlock('3. My Development Goals', [
+        addContentBlock('3. My. Development Goals', [
             { label: 'Self-Leadership Goal 1', value: formData.goalSelf1 },
             { label: 'Self-Leadership Goal 2', value: formData.goalSelf2 },
             { label: 'Relational Leadership Goal 1', value: formData.goalRelational1 },
@@ -183,9 +185,7 @@ app.post('/api/generate-pdf', async (req, res) => {
     }
 });
 
-// Start the server and THEN initialize the sheet
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
-    // Initialize the sheet connection AFTER the server has started
     initializeSheet();
 });
