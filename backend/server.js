@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// We will import GoogleSpreadsheet dynamically
 const { JWT } = require('google-auth-library');
 
 const app = express();
@@ -13,36 +13,47 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // --- Google Sheets Setup ---
-// --- FINAL FIX: Revert to using the Environment Variable for credentials on the server ---
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID; 
 const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
 const serviceAccountAuth = new JWT({
     email: creds.client_email,
-    key: creds.private_key.replace(/\\n/g, '\n'), // .replace() is needed for env var
+    key: creds.private_key.replace(/\\n/g, '\n'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+// Initialize doc variable, but load it inside an async function
+let doc;
 
 async function accessSheet() {
     try {
+        // Use dynamic import() to load the ESM module
+        const { GoogleSpreadsheet } = await import('google-spreadsheet');
+        doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+
         await doc.loadInfo();
         console.log(`Successfully connected to Google Sheet: "${doc.title}"`);
     } catch (error) {
         console.error('Error loading Google Sheet:', error);
     }
 }
-accessSheet();
+
+accessSheet(); // Initialize connection on server start
 
 // --- API Endpoints ---
 
 app.post('/api/submit', async (req, res) => {
     try {
+        if (!doc) {
+            throw new Error('Google Sheet not initialized. Check server logs for connection errors.');
+        }
         const sheet = doc.sheetsByIndex[0];
         const { userInfo, formData } = req.body;
+
         if (!userInfo || !formData) return res.status(400).json({ message: "Missing data." });
+
         const newRow = { Timestamp: new Date().toLocaleString(), Name: userInfo.name, Organization: userInfo.organization, 'Vision 1': formData.vision1, 'Vision 2': formData.vision2, 'Focus Self': formData.focusSelf.join(', '), 'Focus Relational': formData.focusRelational.join(', '), 'Focus Strategic': formData.focusStrategic.join(', '), 'Goal Self 1': formData.goalSelf1, 'Goal Self 2': formData.goalSelf2, 'Goal Relational 1': formData.goalRelational1, 'Goal Relational 2': formData.goalRelational2, 'Goal Strategic 1': formData.goalStrategic1, 'Goal Strategic 2': formData.goalStrategic2, 'Dev Stretch': formData.devStretch, 'Dev Coaching': formData.devCoaching, 'Dev Learning': formData.devLearning, 'Dev Reflection': formData.devReflection, 'Measure Behaviors': formData.measureBehaviors, 'Measure Feedback': formData.measureFeedback, 'Measure Indicators': formData.measureIndicators, 'Accountability': formData.accountability };
+
         await sheet.addRow(newRow);
         res.status(200).json({ message: "Response submitted successfully!" });
     } catch (error) {
@@ -83,9 +94,9 @@ app.post('/api/generate-pdf', async (req, res) => {
             pdfDoc.moveDown(1.5);
         };
 
+        const imageWidth = 80;
+        const xPosition = (pdfDoc.page.width - imageWidth) / 2;
         if (fs.existsSync('./logo.png')) {
-            const imageWidth = 80;
-            const xPosition = (pdfDoc.page.width - imageWidth) / 2;
             pdfDoc.image('./logo.png', xPosition, 60, { width: imageWidth });
         }
         
