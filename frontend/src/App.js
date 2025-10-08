@@ -121,7 +121,7 @@ function App() {
     setStatus({ message: 'Submitting your response...', type: 'info' });
 
     try {
-      await axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData });
+      axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData });
       setStatus({ message: 'Your response has been saved!', type: 'success' });
       setStep('review'); // Go to review page on successful submission
     } catch (error) {
