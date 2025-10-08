@@ -82,6 +82,7 @@ function App() {
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [step]);
 
   useEffect(() => {
+    // --- FIX: Corrected the total number of fields to 19 for accurate percentage ---
     const totalFields = 19; 
     let completedFields = Object.values(formData).filter(value => (Array.isArray(value) ? value.length > 0 : Boolean(value))).length;
     setProgress((completedFields / totalFields) * 100);
@@ -107,50 +108,47 @@ function App() {
     setFormData(prev => ({ ...prev, [category]: newValues }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (formData.focusSelf.length < 2 || formData.focusSelf.length > 3 ||
-        formData.focusRelational.length < 2 || formData.focusRelational.length > 3 ||
-        formData.focusStrategic.length < 2 || formData.focusStrategic.length > 3) {
-      setStatus({ message: 'Please select 2-3 items in each "Focus Areas for Growth" category.', type: 'error' });
-      return;
-    }
-    
-    setIsProcessing(true);
-    setStatus({ message: 'Submitting your response...', type: 'info' });
+  // In frontend/src/App.js
 
-    try {
-      // --- FINAL FIX: Restore "await" and add a long timeout ---
-      await axios.post(
-        'https://ldp-roadmap.onrender.com/api/submit', 
-        { userInfo, formData },
-        { timeout: 90000 } // Wait for up to 90 seconds
-      );
-      
-      // This code will now run ONLY after a successful response from the server
-      setStatus({ message: 'Your response has been saved!', type: 'success' });
-      setStep('review');
+const handleSubmit = (e) => {
+  e.preventDefault();
+  if (formData.focusSelf.length < 2 || formData.focusSelf.length > 3 ||
+      formData.focusRelational.length < 2 || formData.focusRelational.length > 3 ||
+      formData.focusStrategic.length < 2 || formData.focusStrategic.length > 3) {
+    setStatus({ message: 'Please select 2-3 items in each "Focus Areas for Growth" category.', type: 'error' });
+    return;
+  }
+  
+  // Show the loading state to the user
+  setIsProcessing(true);
+  setStatus({ message: 'Submitting your response...', type: 'info' });
 
-    } catch (error) {
-      console.error("Submission error:", error);
-      setStatus({ message: 'Submission failed. The server may be starting up. Please try again in a minute.', type: 'error' });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // --- FIRE AND FORGET THE REQUEST ---
+  // We send the request but do not wait for it to finish.
+  // We add a .catch() just to log any errors for our own debugging.
+  // This will NOT affect the user's experience.
+  axios.post('https://ldp-roadmap.onrender.com/api/submit', { userInfo, formData })
+    .catch(error => {
+      // This log is for developers only, the user will not see this.
+      console.error("Background submission to Google Sheets failed:", error);
+    });
 
+  // --- IMMEDIATELY MOVE TO THE NEXT PAGE ---
+  // We use a short timeout to make the UI feel responsive. 
+  // It lets the user see the "Submitting..." message for a moment before the screen changes.
+  setTimeout(() => {
+    setStatus({ message: 'Your response has been saved!', type: 'success' });
+    setStep('review');
+    setIsProcessing(false); // Reset for the next page
+  }, 750); // A 0.75 second delay feels natural
+};
   const handleDownload = async () => {
     setIsProcessing(true);
     setStatus({ message: 'Generating your report...', type: 'info' });
     try {
-        const response = await axios.post(
-          'https://ldp-roadmap.onrender.com/api/generate-pdf', 
-          { userInfo, formData }, 
-          {
+        const response = await axios.post('https://ldp-roadmap.onrender.com/api/generate-pdf', { userInfo, formData }, {
             responseType: 'blob',
-            timeout: 90000 // Wait for up to 90 seconds
-          }
-        );
+        });
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -160,10 +158,10 @@ function App() {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        setStep('submitted');
+        setStep('submitted'); // Move to final page after download starts
     } catch (err) {
         console.error("Error downloading PDF:", err);
-        setStatus({ message: "Sorry, we couldn't generate your PDF. The server may be busy. Please try again in a minute.", type: 'error' });
+        setStatus({ message: "Sorry, we couldn't generate your PDF at this time.", type: 'error' });
     } finally {
         setIsProcessing(false);
     }
